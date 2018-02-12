@@ -1,284 +1,139 @@
-'use strict'; // necessary for es6 output in node
+import { browser, element, by, ElementFinder } from 'protractor';
+import { resolve } from 'path';
 
-import { browser, element, by, ElementFinder, ElementArrayFinder } from 'protractor';
-import { promise } from 'selenium-webdriver';
-
-const expectedH1 = 'Tour of Heroes';
-const expectedTitle = `${expectedH1}`;
-const targetHero = { id: 15, name: 'Magneta' };
-const targetHeroDashboardIndex = 3;
-const nameSuffix = 'X';
-const newHeroName = targetHero.name + nameSuffix;
-
-class Hero {
-  id: number;
-  name: string;
-
-  // Factory methods
-
-  // Hero from string formatted as '<id> <name>'.
-  static fromString(s: string): Hero {
-    return {
-      id: +s.substr(0, s.indexOf(' ')),
-      name: s.substr(s.indexOf(' ') + 1),
-    };
-  }
-
-  // Hero from hero list <li> element.
-  static async fromLi(li: ElementFinder): Promise<Hero> {
-      let stringsFromA = await li.all(by.css('a')).getText();
-      let strings = stringsFromA[0].split(' ');
-      return { id: +strings[0], name: strings[1] };
-  }
-
-  // Hero id and name from the given detail element.
-  static async fromDetail(detail: ElementFinder): Promise<Hero> {
-    // Get hero id from the first <div>
-    let _id = await detail.all(by.css('div')).first().getText();
-    // Get name from the h2
-    let _name = await detail.element(by.css('h2')).getText();
-    return {
-        id: +_id.substr(_id.indexOf(' ') + 1),
-        name: _name.substr(0, _name.lastIndexOf(' '))
-    };
-  }
-}
-
-describe('Tutorial part 6', () => {
-
-  beforeAll(() => browser.get(''));
-
-  function getPageElts() {
-    let navElts = element.all(by.css('app-root nav a'));
-
-    return {
-      navElts: navElts,
-
-      appDashboardHref: navElts.get(0),
-      appDashboard: element(by.css('app-root app-dashboard')),
-      topHeroes: element.all(by.css('app-root app-dashboard > div h4')),
-
-      appHeroesHref: navElts.get(1),
-      appHeroes: element(by.css('app-root app-heroes')),
-      allHeroes: element.all(by.css('app-root app-heroes li')),
-      selectedHeroSubview: element(by.css('app-root app-heroes > div:last-child')),
-
-      heroDetail: element(by.css('app-root app-hero-detail > div')),
-
-      searchBox: element(by.css('#search-box')),
-      searchResults: element.all(by.css('.search-result li'))
-    };
-  }
-
-  describe('Initial page', () => {
-
-    it(`has title '${expectedTitle}'`, () => {
-      expect(browser.getTitle()).toEqual(expectedTitle);
-    });
-
-    it(`has h1 '${expectedH1}'`, () => {
-        expectHeading(1, expectedH1);
-    });
-
-    const expectedViewNames = ['Dashboard', 'Heroes'];
-    it(`has views ${expectedViewNames}`, () => {
-      let viewNames = getPageElts().navElts.map((el: ElementFinder) => el.getText());
-      expect(viewNames).toEqual(expectedViewNames);
-    });
-
-    it('has dashboard as the active view', () => {
-      let page = getPageElts();
-      expect(page.appDashboard.isPresent()).toBeTruthy();
-    });
-
-  });
-
-  describe('Dashboard tests', () => {
-
-    beforeAll(() => browser.get(''));
-
-    it('has top heroes', () => {
-      let page = getPageElts();
-      expect(page.topHeroes.count()).toEqual(4);
-    });
-
-    it(`selects and routes to ${targetHero.name} details`, dashboardSelectTargetHero);
-
-    it(`updates hero name (${newHeroName}) in details view`, updateHeroNameInDetailView);
-
-    it(`cancels and shows ${targetHero.name} in Dashboard`, () => {
-      element(by.buttonText('go back')).click();
-      browser.waitForAngular(); // seems necessary to gets tests to pass for toh-pt6
-
-      let targetHeroElt = getPageElts().topHeroes.get(targetHeroDashboardIndex);
-      expect(targetHeroElt.getText()).toEqual(targetHero.name);
-    });
-
-    it(`selects and routes to ${targetHero.name} details`, dashboardSelectTargetHero);
-
-    it(`updates hero name (${newHeroName}) in details view`, updateHeroNameInDetailView);
-
-    it(`saves and shows ${newHeroName} in Dashboard`, () => {
-      element(by.buttonText('save')).click();
-      browser.waitForAngular(); // seems necessary to gets tests to pass for toh-pt6
-
-      let targetHeroElt = getPageElts().topHeroes.get(targetHeroDashboardIndex);
-      expect(targetHeroElt.getText()).toEqual(newHeroName);
-    });
-
-  });
-
-  describe('Heroes tests', () => {
-
-    beforeAll(() => browser.get(''));
-
-    it('can switch to Heroes view', () => {
-      getPageElts().appHeroesHref.click();
-      let page = getPageElts();
-      expect(page.appHeroes.isPresent()).toBeTruthy();
-      expect(page.allHeroes.count()).toEqual(10, 'number of heroes');
-    });
-
-    it('can route to hero details', async () => {
-      getHeroLiEltById(targetHero.id).click();
-
-      let page = getPageElts();
-      expect(page.heroDetail.isPresent()).toBeTruthy('shows hero detail');
-      let hero = await Hero.fromDetail(page.heroDetail);
-      expect(hero.id).toEqual(targetHero.id);
-      expect(hero.name).toEqual(targetHero.name.toUpperCase());
-    });
-
-    it(`updates hero name (${newHeroName}) in details view`, updateHeroNameInDetailView);
-
-    it(`shows ${newHeroName} in Heroes list`, () => {
-      element(by.buttonText('save')).click();
-      browser.waitForAngular();
-      let expectedText = `${targetHero.id} ${newHeroName}`;
-      expect(getHeroAEltById(targetHero.id).getText()).toEqual(expectedText);
-    });
-
-    it(`deletes ${newHeroName} from Heroes list`, async () => {
-      const heroesBefore = await toHeroArray(getPageElts().allHeroes);
-      const li = getHeroLiEltById(targetHero.id);
-      li.element(by.buttonText('x')).click();
-
-      const page = getPageElts();
-      expect(page.appHeroes.isPresent()).toBeTruthy();
-      expect(page.allHeroes.count()).toEqual(9, 'number of heroes');
-      const heroesAfter = await toHeroArray(page.allHeroes);
-      // console.log(await Hero.fromLi(page.allHeroes[0]));
-      const expectedHeroes =  heroesBefore.filter(h => h.name !== newHeroName);
-      expect(heroesAfter).toEqual(expectedHeroes);
-      // expect(page.selectedHeroSubview.isPresent()).toBeFalsy();
-    });
-
-    it(`adds back ${targetHero.name}`, async () => {
-      const newHeroName = 'Alice';
-      const heroesBefore = await toHeroArray(getPageElts().allHeroes);
-      const numHeroes = heroesBefore.length;
-
-      element(by.css('input')).sendKeys(newHeroName);
-      element(by.buttonText('add')).click();
-
-      let page = getPageElts();
-      let heroesAfter = await toHeroArray(page.allHeroes);
-      expect(heroesAfter.length).toEqual(numHeroes + 1, 'number of heroes');
-
-      expect(heroesAfter.slice(0, numHeroes)).toEqual(heroesBefore, 'Old heroes are still there');
-
-      const maxId = heroesBefore[heroesBefore.length - 1].id;
-      expect(heroesAfter[numHeroes]).toEqual({id: maxId + 1, name: newHeroName});
-    });
-  });
-
-  describe('Progressive hero search', () => {
-
-    beforeAll(() => browser.get(''));
-
-    it(`searches for 'Ma'`, async () => {
-      getPageElts().searchBox.sendKeys('Ma');
-      browser.sleep(1000);
-
-      expect(getPageElts().searchResults.count()).toBe(4);
-    });
-
-    it(`continues search with 'g'`, async () => {
-      getPageElts().searchBox.sendKeys('g');
-      browser.sleep(1000);
-      expect(getPageElts().searchResults.count()).toBe(2);
-    });
-
-    it(`continues search with 'e' and gets ${targetHero.name}`, async () => {
-      getPageElts().searchBox.sendKeys('n');
-      browser.sleep(1000);
-      let page = getPageElts();
-      expect(page.searchResults.count()).toBe(1);
-      let hero = page.searchResults.get(0);
-      expect(hero.getText()).toEqual(targetHero.name);
-    });
-
-    it(`navigates to ${targetHero.name} details view`, async () => {
-      let hero = getPageElts().searchResults.get(0);
-      expect(hero.getText()).toEqual(targetHero.name);
-      hero.click();
-
-      let page = getPageElts();
-      expect(page.heroDetail.isPresent()).toBeTruthy('shows hero detail');
-      let hero2 = await Hero.fromDetail(page.heroDetail);
-      expect(hero2.id).toEqual(targetHero.id);
-      expect(hero2.name).toEqual(targetHero.name.toUpperCase());
-    });
-  });
-
-  async function dashboardSelectTargetHero() {
-    let targetHeroElt = getPageElts().topHeroes.get(targetHeroDashboardIndex);
-    expect(targetHeroElt.getText()).toEqual(targetHero.name);
-    targetHeroElt.click();
-    browser.waitForAngular(); // seems necessary to gets tests to pass for toh-pt6
-
-    let page = getPageElts();
-    expect(page.heroDetail.isPresent()).toBeTruthy('shows hero detail');
-    let hero = await Hero.fromDetail(page.heroDetail);
-    expect(hero.id).toEqual(targetHero.id);
-    expect(hero.name).toEqual(targetHero.name.toUpperCase());
-  }
-
-  async function updateHeroNameInDetailView() {
-    // Assumes that the current view is the hero details view.
-    addToHeroName(nameSuffix);
-
-    let page = getPageElts();
-    let hero = await Hero.fromDetail(page.heroDetail);
-    expect(hero.id).toEqual(targetHero.id);
-    expect(hero.name).toEqual(newHeroName.toUpperCase());
-  }
-
-});
-
-function addToHeroName(text: string): promise.Promise<void> {
-  let input = element(by.css('input'));
-  return input.sendKeys(text);
-}
-
-function expectHeading(hLevel: number, expectedText: string): void {
-    let hTag = `h${hLevel}`;
-    let hText = element(by.css(hTag)).getText();
-    expect(hText).toEqual(expectedText, hTag);
+const page = {
+  configClearButton: element.all(by.css('app-config > div button')).get(2),
+  configErrorButton: element.all(by.css('app-config > div button')).get(3),
+  configErrorMessage: element(by.css('app-config p')),
+  configGetButton: element.all(by.css('app-config > div button')).get(0),
+  configGetResponseButton: element.all(by.css('app-config > div button')).get(1),
+  configSpan: element(by.css('app-config span')),
+  downloadButton: element.all(by.css('app-downloader button')).get(0),
+  downloadClearButton: element.all(by.css('app-downloader button')).get(1),
+  downloadMessage: element(by.css('app-downloader p')),
+  heroesListAddButton: element.all(by.css('app-heroes > div button')).get(0),
+  heroesListInput: element(by.css('app-heroes > div input')),
+  heroesListSearchButton: element.all(by.css('app-heroes > div button')).get(1),
+  heroesListItems: element.all(by.css('app-heroes ul li')),
+  logClearButton: element(by.css('app-messages button')),
+  logList: element(by.css('app-messages ol')),
+  logListItems: element.all(by.css('app-messages ol li')),
+  searchInput: element(by.css('app-package-search input#name')),
+  searchListItems: element.all(by.css('app-package-search li')),
+  uploadInput: element(by.css('app-uploader input')),
+  uploadMessage: element(by.css('app-uploader p'))
 };
 
-function getHeroAEltById(id: number): ElementFinder {
-  let spanForId = element(by.cssContainingText('li span.badge', id.toString()));
-  return spanForId.element(by.xpath('..'));
-}
+let checkLogForMessage = (message: string) => {
+  expect(page.logList.getText()).toContain(message);
+};
 
-function getHeroLiEltById(id: number): ElementFinder {
-  let spanForId = element(by.cssContainingText('li span.badge', id.toString()));
-  return spanForId.element(by.xpath('../..'));
-}
+describe('Http Tests', function() {
+  beforeEach(() => {
+    browser.get('');
+  });
 
-async function toHeroArray(allHeroes: ElementArrayFinder): Promise<Hero[]> {
-  let promisedHeroes = await allHeroes.map(Hero.fromLi);
-  // The cast is necessary to get around issuing with the signature of Promise.all()
-  return <Promise<any>> Promise.all(promisedHeroes);
-}
+  describe('Heroes', () => {
+    it('retrieves the list of heroes at startup', () => {
+      expect(page.heroesListItems.count()).toBe(4);
+      expect(page.heroesListItems.get(0).getText()).toContain('Mr. Nice');
+      checkLogForMessage('GET "api/heroes"');
+    });
+
+    it('makes a POST to add a new hero', () => {
+      page.heroesListInput.sendKeys('Magneta');
+      page.heroesListAddButton.click();
+      expect(page.heroesListItems.count()).toBe(5);
+      checkLogForMessage('POST "api/heroes"');
+    });
+
+    it('makes a GET to search for a hero', () => {
+      page.heroesListInput.sendKeys('Celeritas');
+      page.heroesListSearchButton.click();
+      checkLogForMessage('GET "api/heroes?name=Celeritas"');
+    });
+  });
+
+  describe('Messages', () => {
+    it('can clear the logs', () => {
+      expect(page.logListItems.count()).toBe(1);
+      page.logClearButton.click();
+      expect(page.logListItems.count()).toBe(0);
+    });
+  });
+
+  describe('Configuration', () => {
+    it('can fetch the configuration JSON file', () => {
+      page.configGetButton.click();
+      checkLogForMessage('GET "assets/config.json"');
+      expect(page.configSpan.getText()).toContain('Heroes API URL is "api/heroes"');
+      expect(page.configSpan.getText()).toContain('Textfile URL is "assets/textfile.txt"');
+    });
+
+    it('can fetch the configuration JSON file with headers', () => {
+      page.configGetResponseButton.click();
+      checkLogForMessage('GET "assets/config.json"');
+      expect(page.configSpan.getText()).toContain('Response headers:');
+      expect(page.configSpan.getText()).toContain('content-type: application/json; charset=UTF-8');
+    });
+
+    it('can clear the configuration log', () => {
+      page.configGetResponseButton.click();
+      expect(page.configSpan.getText()).toContain('Response headers:');
+      page.configClearButton.click();
+      expect(page.configSpan.isPresent()).toBeFalsy();
+    });
+
+    it('throws an error for a non valid url', () => {
+      page.configErrorButton.click();
+      checkLogForMessage('GET "not/a/real/url"');
+      expect(page.configErrorMessage.getText()).toContain('"Something bad happened; please try again later."');
+    });
+  });
+
+  describe('Download', () => {
+    it('can download a txt file and show it', () => {
+      page.downloadButton.click();
+      checkLogForMessage('DownloaderService downloaded "assets/textfile.txt"');
+      checkLogForMessage('GET "assets/textfile.txt"');
+      expect(page.downloadMessage.getText()).toContain('Contents: "This is the downloaded text file "');
+    });
+
+    it('can clear the log of the download', () => {
+      page.downloadButton.click();
+      expect(page.downloadMessage.getText()).toContain('Contents: "This is the downloaded text file "');
+      page.downloadClearButton.click();
+      expect(page.downloadMessage.isPresent()).toBeFalsy();
+    });
+  });
+
+  describe('Upload', () => {
+    it('can upload a file', () => {
+      const filename = 'app.po.ts';
+      const url = resolve(__dirname, filename);
+      page.uploadInput.sendKeys(url);
+      checkLogForMessage('POST "/upload/file" succeeded in');
+      expect(page.uploadMessage.getText()).toContain(
+        `File "${filename}" was completely uploaded!`);
+    });
+  });
+
+  describe('PackageSearch', () => {
+    it('can search for npm package and find in cache', () => {
+      const packageName = 'angular';
+      page.searchInput.sendKeys(packageName);
+      checkLogForMessage(
+        'Caching response from "https://npmsearch.com/query?q=angular"');
+      expect(page.searchListItems.count()).toBeGreaterThan(1, 'angular items');
+
+      page.searchInput.clear();
+      page.searchInput.sendKeys(' ');
+      expect(page.searchListItems.count()).toBe(0, 'search empty');
+
+      page.searchInput.clear();
+      page.searchInput.sendKeys(packageName);
+      checkLogForMessage(
+        'Found cached response for "https://npmsearch.com/query?q=angular"');
+    });
+  });
+});
