@@ -21,6 +21,9 @@ import { PackageSearchComponent } from './package-search/package-search.componen
 import { UploaderComponent }    from './uploader/uploader.component';
 
 import { httpInterceptorProviders } from './http-interceptors/index';
+import { FooComponent } from './foo/foo.component';
+import { MyNewComponentComponent } from './my-new-component/my-new-component.component';
+import { TtvComponent } from './ttv/ttv.component';
 
 @NgModule({
   imports: [
@@ -52,6 +55,9 @@ import { httpInterceptorProviders } from './http-interceptors/index';
     MessagesComponent,
     UploaderComponent,
     PackageSearchComponent,
+    FooComponent,
+    MyNewComponentComponent,
+    TtvComponent,
   ],
   providers: [
     AuthService,
